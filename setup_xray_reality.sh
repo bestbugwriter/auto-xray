@@ -69,6 +69,10 @@ generate_shortid() {
   openssl rand -hex 8
 }
 
+generate_proxy_secret() {
+  openssl rand -hex 6
+}
+
 select_sni() {
   local index=$((RANDOM % ${#SNI_LIST[@]}))
   echo "${SNI_LIST[$index]}"
@@ -103,6 +107,8 @@ generate_client_config() {
   local public_key="$3"
   local short_id="$4"
   local sni="$5"
+  local account_user="$6"
+  local account_pass="$7"
 
   jq \
     --arg address "$server_address" \
@@ -110,11 +116,16 @@ generate_client_config() {
     --arg public "$public_key" \
     --arg sni "$sni" \
     --arg short "$short_id" \
+    --arg user "$account_user" \
+    --arg pass "$account_pass" \
     '(.outbounds[] | select(.tag == "proxy").settings.vnext[0].address) = $address
      | (.outbounds[] | select(.tag == "proxy").settings.vnext[0].users[0].id) = $uuid
      | (.outbounds[] | select(.tag == "proxy").streamSettings.realitySettings.serverName) = $sni
      | (.outbounds[] | select(.tag == "proxy").streamSettings.realitySettings.publicKey) = $public
-     | (.outbounds[] | select(.tag == "proxy").streamSettings.realitySettings.shortId) = $short' \
+     | (.outbounds[] | select(.tag == "proxy").streamSettings.realitySettings.shortId) = $short
+     | (.inbounds[] | select(.tag == "socks-in").settings.auth) = "password"
+     | (.inbounds[] | select(.tag == "socks-in").settings.accounts) = [{user: $user, pass: $pass}]
+     | (.inbounds[] | select(.tag == "http-in").settings.accounts) = [{user: $user, pass: $pass}]' \
     "$CLIENT_TEMPLATE_FILE" > "$CLIENT_CONFIG_FILE_OUT"
 }
 
@@ -198,18 +209,22 @@ fi
 
 SHORT_ID=$(generate_shortid)
 SELECTED_SNI=$(select_sni)
+PROXY_USER=$(generate_proxy_secret)
+PROXY_PASS=$(generate_proxy_secret)
 
 log "UUID：$UUID"
 log "Public Key：$PUBLIC_KEY"
 log "Short ID：$SHORT_ID"
 log "选择的 SNI/Dest：$SELECTED_SNI"
+log "本地代理用户名：$PROXY_USER"
+log "本地代理密码：$PROXY_PASS"
 
 generate_server_config "$UUID" "$PRIVATE_KEY" "$SHORT_ID" "$SELECTED_SNI"
 log "服务端配置已写入：$XRAY_CONFIG_FILE"
 
 restart_xray_service
 
-generate_client_config "$SERVER_ADDRESS" "$UUID" "$PUBLIC_KEY" "$SHORT_ID" "$SELECTED_SNI"
+generate_client_config "$SERVER_ADDRESS" "$UUID" "$PUBLIC_KEY" "$SHORT_ID" "$SELECTED_SNI" "$PROXY_USER" "$PROXY_PASS"
 log "客户端配置已生成：$CLIENT_CONFIG_FILE_OUT"
 
 VLESS_LINK=$(generate_vless_link "$SERVER_ADDRESS" "$UUID" "$PUBLIC_KEY" "$SHORT_ID" "$SELECTED_SNI")
@@ -224,5 +239,7 @@ echo "$VLESS_LINK" | tee -a "$LOG_FILE"
 echo ""
 
 log "-----------------------------------------------------"
+log "Socks5/HTTP 代理用户名：$PROXY_USER"
+log "Socks5/HTTP 代理密码：$PROXY_PASS"
 log "提示：请确认服务器防火墙已开放 TCP 443 端口。"
 log "脚本执行完毕。"

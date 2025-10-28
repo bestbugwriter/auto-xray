@@ -61,9 +61,15 @@
         "destOverride": ["http", "tls", "quic"]
       },
       "settings": {
-        "auth": "noauth",
+        "auth": "password",
         "udp": true,
-        "ip": "127.0.0.1"
+        "ip": "127.0.0.1",
+        "accounts": [
+          {
+            "user": "",
+            "pass": ""
+          }
+        ]
       }
     },
     {
@@ -76,7 +82,13 @@
         "destOverride": ["http", "tls", "quic"]
       },
       "settings": {
-        "allowTransparent": false
+        "allowTransparent": false,
+        "accounts": [
+          {
+            "user": "",
+            "pass": ""
+          }
+        ]
       }
     }
   ],
