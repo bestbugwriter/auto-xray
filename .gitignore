@@ -1,0 +1,4 @@
+# Generated artifacts
+client_config.json
+setup_xray.log
+*.log
