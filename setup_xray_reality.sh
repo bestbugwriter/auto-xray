@@ -14,6 +14,7 @@ SNI_LIST=(
 SERVER_TEMPLATE_FILE="${SCRIPT_DIR}/server_template.json"
 CLIENT_TEMPLATE_FILE="${SCRIPT_DIR}/client_template.json"
 XRAY_CONFIG_FILE="/usr/local/etc/xray/config.json"
+SERVER_CONFIG_FILE_OUT="${SCRIPT_DIR}/server_config.json"
 CLIENT_CONFIG_FILE_OUT="${SCRIPT_DIR}/client_config.json"
 LOG_FILE="${SCRIPT_DIR}/setup_xray.log"
 
@@ -83,9 +84,10 @@ generate_server_config() {
   local private_key="$2"
   local short_id="$3"
   local sni="$4"
+  local output_file="${5:-$XRAY_CONFIG_FILE}"
   local dest="${sni}:443"
 
-  mkdir -p "$(dirname "$XRAY_CONFIG_FILE")"
+  mkdir -p "$(dirname "$output_file")"
 
   jq \
     --arg uuid "$uuid" \
@@ -98,7 +100,7 @@ generate_server_config() {
      | (.inbounds[0].streamSettings.realitySettings.serverNames) = [$sni]
      | (.inbounds[0].streamSettings.realitySettings.privateKey) = $private
      | (.inbounds[0].streamSettings.realitySettings.shortIds) = [$short, ""]' \
-    "$SERVER_TEMPLATE_FILE" > "$XRAY_CONFIG_FILE"
+    "$SERVER_TEMPLATE_FILE" > "$output_file"
 }
 
 generate_client_config() {
@@ -164,7 +166,51 @@ restart_xray_service() {
   fi
 }
 
-if [[ $EUID -ne 0 ]]; then
+usage() {
+  cat <<EOF
+用法: $(basename "$0") <服务器域名或IP> [--auto-config]
+  --auto-config    已安装 Xray 的情况下使用，只在当前目录生成服务端和客户端配置文件，不执行安装或服务重启操作。
+EOF
+}
+
+AUTO_CONFIG_ONLY=false
+SERVER_ADDRESS=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --auto-config)
+      AUTO_CONFIG_ONLY=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -* )
+      echo "错误：未知参数：$1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      if [ -z "$SERVER_ADDRESS" ]; then
+        SERVER_ADDRESS="$1"
+        shift
+      else
+        echo "错误：检测到多余的参数：$1" >&2
+        usage >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$SERVER_ADDRESS" ]; then
+  echo "错误：请提供服务器的公网 IP 地址或域名作为第一个参数。" >&2
+  usage >&2
+  exit 1
+fi
+
+if [[ $EUID -ne 0 && "$AUTO_CONFIG_ONLY" != true ]]; then
   echo "错误：请以 root 身份运行此脚本。" >&2
   exit 1
 fi
@@ -172,19 +218,19 @@ fi
 rm -f "$LOG_FILE"
 
 log "开始执行 Xray VLESS + REALITY 自动化配置。"
-
-if [ $# -lt 1 ]; then
-  log "错误：请提供服务器的公网 IP 地址或域名作为第一个参数。"
-  log "示例：sudo ./setup_xray_reality.sh your.server.com"
-  exit 1
-fi
-
-SERVER_ADDRESS="$1"
 log "服务器地址/域名：$SERVER_ADDRESS"
+
+if [ "$AUTO_CONFIG_ONLY" = true ]; then
+  log "已启用 --auto-config 模式：仅在当前目录生成配置文件，不执行安装或服务重启操作。"
+fi
 
 check_dependencies
 
 if ! command_exists xray; then
+  if [ "$AUTO_CONFIG_ONLY" = true ]; then
+    log "错误：检测到未安装 Xray，请先安装 Xray 后再使用 --auto-config 参数。"
+    exit 1
+  fi
   log "Xray 未安装，正在安装..."
   if bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install; then
     log "Xray 安装完成。"
@@ -219,10 +265,19 @@ log "选择的 SNI/Dest：$SELECTED_SNI"
 log "本地代理用户名：$PROXY_USER"
 log "本地代理密码：$PROXY_PASS"
 
-generate_server_config "$UUID" "$PRIVATE_KEY" "$SHORT_ID" "$SELECTED_SNI"
-log "服务端配置已写入：$XRAY_CONFIG_FILE"
+SERVER_CONFIG_DEST="$XRAY_CONFIG_FILE"
+if [ "$AUTO_CONFIG_ONLY" = true ]; then
+  SERVER_CONFIG_DEST="$SERVER_CONFIG_FILE_OUT"
+fi
 
-restart_xray_service
+generate_server_config "$UUID" "$PRIVATE_KEY" "$SHORT_ID" "$SELECTED_SNI" "$SERVER_CONFIG_DEST"
+
+if [ "$AUTO_CONFIG_ONLY" = true ]; then
+  log "服务端配置已生成：$SERVER_CONFIG_DEST"
+else
+  log "服务端配置已写入：$SERVER_CONFIG_DEST"
+  restart_xray_service
+fi
 
 generate_client_config "$SERVER_ADDRESS" "$UUID" "$PUBLIC_KEY" "$SHORT_ID" "$SELECTED_SNI" "$PROXY_USER" "$PROXY_PASS"
 log "客户端配置已生成：$CLIENT_CONFIG_FILE_OUT"
@@ -231,6 +286,7 @@ VLESS_LINK=$(generate_vless_link "$SERVER_ADDRESS" "$UUID" "$PUBLIC_KEY" "$SHORT
 
 log "-----------------------------------------------------"
 log "配置完成。"
+log "服务端配置文件路径：$SERVER_CONFIG_DEST"
 log "客户端配置文件路径：$CLIENT_CONFIG_FILE_OUT"
 log "VLESS 链接如下："
 
@@ -242,4 +298,7 @@ log "-----------------------------------------------------"
 log "Socks5/HTTP 代理用户名：$PROXY_USER"
 log "Socks5/HTTP 代理密码：$PROXY_PASS"
 log "提示：请确认服务器防火墙已开放 TCP 443 端口。"
+if [ "$AUTO_CONFIG_ONLY" = true ]; then
+  log "提示：请手动将生成的服务端配置应用到 Xray。"
+fi
 log "脚本执行完毕。"
