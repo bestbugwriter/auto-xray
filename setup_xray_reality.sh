@@ -174,18 +174,38 @@ restart_xray_service() {
 
 usage() {
   cat <<EOF
-用法: $(basename "$0") <服务器域名或IP> [--auto-config]
+用法: $(basename "$0") <服务器域名或IP> [--auto-config] [--sni <SNI域名>]
   --auto-config    已安装 Xray 的情况下使用，只在当前目录生成服务端和客户端配置文件，不执行安装或服务重启操作。
+  --sni <SNI域名>  指定 REALITY 的 SNI/Dest，跳过内置列表的随机选择。
 EOF
 }
 
 AUTO_CONFIG_ONLY=false
 SERVER_ADDRESS=""
+CUSTOM_SNI=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --auto-config)
       AUTO_CONFIG_ONLY=true
+      shift
+      ;;
+    --sni)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "错误：--sni 选项需要指定一个域名。" >&2
+        usage >&2
+        exit 1
+      fi
+      CUSTOM_SNI="$2"
+      shift 2
+      ;;
+    --sni=*)
+      CUSTOM_SNI="${1#--sni=}"
+      if [ -z "$CUSTOM_SNI" ]; then
+        echo "错误：--sni 选项需要指定一个域名。" >&2
+        usage >&2
+        exit 1
+      fi
       shift
       ;;
     -h|--help)
@@ -260,14 +280,22 @@ if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
 fi
 
 SHORT_ID=$(generate_shortid)
-SELECTED_SNI=$(select_sni)
+if [ -n "$CUSTOM_SNI" ]; then
+  SELECTED_SNI="$CUSTOM_SNI"
+else
+  SELECTED_SNI=$(select_sni)
+fi
 PROXY_USER=$(generate_proxy_secret)
 PROXY_PASS=$(generate_proxy_secret)
 
 log "UUID：$UUID"
 log "Public Key：$PUBLIC_KEY"
 log "Short ID：$SHORT_ID"
-log "选择的 SNI/Dest：$SELECTED_SNI"
+if [ -n "$CUSTOM_SNI" ]; then
+  log "使用指定的 SNI/Dest：$SELECTED_SNI"
+else
+  log "选择的 SNI/Dest：$SELECTED_SNI"
+fi
 log "本地代理用户名：$PROXY_USER"
 log "本地代理密码：$PROXY_PASS"
 
