@@ -100,10 +100,12 @@ generate_server_config() {
     --arg private "$private_key" \
     --arg short "$short_id" \
     '(.inbounds[0].settings.clients[0].id) = $uuid
+     | del(.inbounds[0].settings.clients[0].flow)
      | (.inbounds[0].streamSettings.realitySettings.dest) = $dest
      | (.inbounds[0].streamSettings.realitySettings.serverNames) = [$sni]
      | (.inbounds[0].streamSettings.realitySettings.privateKey) = $private
-     | (.inbounds[0].streamSettings.realitySettings.shortIds) = [$short, ""]' \
+     | (.inbounds[0].streamSettings.realitySettings.shortIds) = [$short, ""]
+     | del(.inbounds[0].streamSettings.realitySettings.publicKey)' \
     "$SERVER_TEMPLATE_FILE" > "$output_file"
 }
 
@@ -146,7 +148,7 @@ generate_vless_link() {
   local remark_encoded
   remark_encoded=$(printf '%s' "$remark" | jq -sRr @uri)
 
-  printf 'vless://%s@%s:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#%s\n' \
+  printf 'vless://%s@%s:443?encryption=none&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#%s\n' \
     "$uuid" "$server_address" "$sni" "$public_key" "$short_id" "$remark_encoded"
 }
 
