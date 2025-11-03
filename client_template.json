@@ -104,7 +104,6 @@
             "users": [
               {
                 "id": "",
-                "flow": "xtls-rprx-vision",
                 "encryption": "none",
                 "level": 0
               }

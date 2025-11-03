@@ -146,7 +146,7 @@ generate_vless_link() {
   local remark_encoded
   remark_encoded=$(printf '%s' "$remark" | jq -sRr @uri)
 
-  printf 'vless://%s@%s:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#%s\n' \
+  printf 'vless://%s@%s:443?encryption=none&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#%s\n' \
     "$uuid" "$server_address" "$sni" "$public_key" "$short_id" "$remark_encoded"
 }
 
