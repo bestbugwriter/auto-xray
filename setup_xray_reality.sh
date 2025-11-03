@@ -100,10 +100,12 @@ generate_server_config() {
     --arg private "$private_key" \
     --arg short "$short_id" \
     '(.inbounds[0].settings.clients[0].id) = $uuid
+     | del(.inbounds[0].settings.clients[0].flow)
      | (.inbounds[0].streamSettings.realitySettings.dest) = $dest
      | (.inbounds[0].streamSettings.realitySettings.serverNames) = [$sni]
      | (.inbounds[0].streamSettings.realitySettings.privateKey) = $private
-     | (.inbounds[0].streamSettings.realitySettings.shortIds) = [$short, ""]' \
+     | (.inbounds[0].streamSettings.realitySettings.shortIds) = [$short, ""]
+     | del(.inbounds[0].streamSettings.realitySettings.publicKey)' \
     "$SERVER_TEMPLATE_FILE" > "$output_file"
 }
 
