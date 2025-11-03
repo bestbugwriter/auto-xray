@@ -28,7 +28,7 @@ command_exists() {
 }
 
 check_dependencies() {
-  local dependencies=("curl" "bash" "openssl" "uuidgen" "jq")
+  local dependencies=("curl" "bash" "openssl" "jq")
   local missing=()
 
   for cmd in "${dependencies[@]}"; do
@@ -39,7 +39,7 @@ check_dependencies() {
 
   if [ ${#missing[@]} -gt 0 ]; then
     log "错误：缺少必要的依赖：${missing[*]}"
-    log "请先安装它们 (例如: apt update && apt install curl openssl uuid-runtime jq)"
+    log "请先安装它们 (例如: apt update && apt install curl openssl jq)"
     exit 1
   fi
 
@@ -55,7 +55,11 @@ check_dependencies() {
 }
 
 generate_uuid() {
-  uuidgen
+  if ! command_exists xray; then
+    log "错误：找不到 'xray' 命令，请先完成 Xray 安装。"
+    exit 1
+  fi
+  xray uuid
 }
 
 generate_keypair() {
