@@ -52,9 +52,24 @@
   },
   "inbounds": [
     {
-      "tag": "socks-in",
+      "tag": "socks-in-public",
       "port": 10800,
-      "listen": "127.0.0.1",
+      "listen": "0.0.0.0",
+      "protocol": "socks",
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"]
+      },
+      "settings": {
+        "auth": "noauth",
+        "udp": true,
+        "ip": "0.0.0.0"
+      }
+    },
+    {
+      "tag": "socks-in",
+      "port": 10802,
+      "listen": "0.0.0.0",
       "protocol": "socks",
       "sniffing": {
         "enabled": true,
@@ -63,7 +78,7 @@
       "settings": {
         "auth": "password",
         "udp": true,
-        "ip": "127.0.0.1",
+        "ip": "0.0.0.0",
         "accounts": [
           {
             "user": "",
@@ -75,7 +90,7 @@
     {
       "tag": "http-in",
       "port": 10801,
-      "listen": "127.0.0.1",
+      "listen": "0.0.0.0",
       "protocol": "http",
       "sniffing": {
         "enabled": true,
