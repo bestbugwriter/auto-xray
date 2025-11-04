@@ -4,6 +4,6 @@
 默认情况下脚本会写入 `/usr/local/etc/xray/config.json`，并在当前目录输出 `client_config.json` 与对应的 `vless://` 链接。
 本地 Socks5/HTTP 代理会随机生成用户名与密码，可在日志和生成的配置中查看。
 
-若需指定 REALITY 的 SNI，可追加 `--sni example.com` 参数；未指定时脚本会从内置列表随机选择。
+若需指定 REALITY 的 SNI，可追加 `--sni example.com` 参数；未指定时脚本会从内置列表随机选择。也可通过 `--uuid`、`--private-key`/`--public-key`、`--short-id`、`--proxy-user`、`--proxy-pass` 参数自定义生成的配置值，未提供时脚本会自动生成。
 
 若 Xray 已安装且只需在当前目录生成配置，可执行 `./setup_xray_reality.sh <服务器域名或IP> --auto-config`。脚本会输出 `server_config.json` 与 `client_config.json`，不会尝试安装或重启 Xray 服务。
