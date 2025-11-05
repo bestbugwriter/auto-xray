@@ -17,6 +17,7 @@ XRAY_CONFIG_FILE="/usr/local/etc/xray/config.json"
 SERVER_CONFIG_FILE_OUT="${SCRIPT_DIR}/server_config.json"
 CLIENT_CONFIG_FILE_OUT="${SCRIPT_DIR}/client_config.json"
 LOG_FILE="${SCRIPT_DIR}/setup_xray.log"
+DEFAULT_PROXY_LISTEN="0.0.0.0"
 
 log() {
   local message="$1"
@@ -117,6 +118,7 @@ generate_client_config() {
   local sni="$5"
   local account_user="$6"
   local account_pass="$7"
+  local proxy_listen="$8"
 
   jq \
     --arg address "$server_address" \
@@ -126,13 +128,19 @@ generate_client_config() {
     --arg short "$short_id" \
     --arg user "$account_user" \
     --arg pass "$account_pass" \
+    --arg listen "$proxy_listen" \
     '(.outbounds[] | select(.tag == "proxy").settings.vnext[0].address) = $address
      | (.outbounds[] | select(.tag == "proxy").settings.vnext[0].users[0].id) = $uuid
      | (.outbounds[] | select(.tag == "proxy").streamSettings.realitySettings.serverName) = $sni
      | (.outbounds[] | select(.tag == "proxy").streamSettings.realitySettings.publicKey) = $public
      | (.outbounds[] | select(.tag == "proxy").streamSettings.realitySettings.shortId) = $short
+     | (.inbounds[] | select(.tag == "socks-in-public").listen) = $listen
+     | (.inbounds[] | select(.tag == "socks-in-public").settings.ip) = $listen
+     | (.inbounds[] | select(.tag == "socks-in").listen) = $listen
+     | (.inbounds[] | select(.tag == "socks-in").settings.ip) = $listen
      | (.inbounds[] | select(.tag == "socks-in").settings.auth) = "password"
      | (.inbounds[] | select(.tag == "socks-in").settings.accounts) = [{user: $user, pass: $pass}]
+     | (.inbounds[] | select(.tag == "http-in").listen) = $listen
      | (.inbounds[] | select(.tag == "http-in").settings.accounts) = [{user: $user, pass: $pass}]' \
     "$CLIENT_TEMPLATE_FILE" > "$CLIENT_CONFIG_FILE_OUT"
 }
@@ -183,6 +191,7 @@ usage() {
   --short-id <ShortID> 指定 REALITY Short ID。
   --proxy-user <用户名> 指定本地代理用户名。
   --proxy-pass <密码>  指定本地代理密码。
+  --proxy-listen <监听地址> 指定本地代理监听地址（默认 0.0.0.0）。
 EOF
 }
 
@@ -195,6 +204,7 @@ CUSTOM_PUBLIC_KEY=""
 CUSTOM_SHORT_ID=""
 CUSTOM_PROXY_USER=""
 CUSTOM_PROXY_PASS=""
+CUSTOM_PROXY_LISTEN=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -328,6 +338,24 @@ while [[ $# -gt 0 ]]; do
       fi
       shift
       ;;
+    --proxy-listen)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "错误：--proxy-listen 选项需要指定一个值。" >&2
+        usage >&2
+        exit 1
+      fi
+      CUSTOM_PROXY_LISTEN="$2"
+      shift 2
+      ;;
+    --proxy-listen=*)
+      CUSTOM_PROXY_LISTEN="${1#--proxy-listen=}"
+      if [ -z "$CUSTOM_PROXY_LISTEN" ]; then
+        echo "错误：--proxy-listen 选项需要指定一个值。" >&2
+        usage >&2
+        exit 1
+      fi
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -455,6 +483,17 @@ if [ -z "$PROXY_USER" ] || [ -z "$PROXY_PASS" ]; then
   exit 1
 fi
 
+if [ -n "$CUSTOM_PROXY_LISTEN" ]; then
+  PROXY_LISTEN="$CUSTOM_PROXY_LISTEN"
+else
+  PROXY_LISTEN="$DEFAULT_PROXY_LISTEN"
+fi
+
+if [ -z "$PROXY_LISTEN" ]; then
+  log "错误：代理监听地址不能为空。"
+  exit 1
+fi
+
 if [ -n "$CUSTOM_UUID" ]; then
   log "使用指定的 UUID：$UUID"
 else
@@ -491,6 +530,12 @@ else
   log "本地代理密码：$PROXY_PASS"
 fi
 
+if [ -n "$CUSTOM_PROXY_LISTEN" ]; then
+  log "使用指定的本地代理监听地址：$PROXY_LISTEN"
+else
+  log "本地代理监听地址：$PROXY_LISTEN"
+fi
+
 SERVER_CONFIG_DEST="$XRAY_CONFIG_FILE"
 if [ "$AUTO_CONFIG_ONLY" = true ]; then
   SERVER_CONFIG_DEST="$SERVER_CONFIG_FILE_OUT"
@@ -505,7 +550,7 @@ else
   restart_xray_service
 fi
 
-generate_client_config "$SERVER_ADDRESS" "$UUID" "$PUBLIC_KEY" "$SHORT_ID" "$SELECTED_SNI" "$PROXY_USER" "$PROXY_PASS"
+generate_client_config "$SERVER_ADDRESS" "$UUID" "$PUBLIC_KEY" "$SHORT_ID" "$SELECTED_SNI" "$PROXY_USER" "$PROXY_PASS" "$PROXY_LISTEN"
 log "客户端配置已生成：$CLIENT_CONFIG_FILE_OUT"
 
 VLESS_LINK=$(generate_vless_link "$SERVER_ADDRESS" "$UUID" "$PUBLIC_KEY" "$SHORT_ID" "$SELECTED_SNI")
@@ -521,6 +566,7 @@ echo "$VLESS_LINK" | tee -a "$LOG_FILE"
 echo ""
 
 log "-----------------------------------------------------"
+log "Socks5/HTTP 代理监听地址：$PROXY_LISTEN"
 log "Socks5/HTTP 代理用户名：$PROXY_USER"
 log "Socks5/HTTP 代理密码：$PROXY_PASS"
 log "提示：请确认服务器防火墙已开放 TCP 443 端口。"
